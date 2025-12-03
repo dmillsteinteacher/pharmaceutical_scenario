@@ -1,9 +1,55 @@
 // Global variable to hold the Chart.js instance
 let costChart = null;
 
+// Helper function to calculate the quartile value (Q1, Median, Q3)
+function quartile(arr, q) {
+    // Note: The array is assumed to be sorted before calling this function in calculateStats
+    const sorted = arr; 
+    const pos = (sorted.length - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    
+    if (base < 0 || base >= sorted.length - 1) {
+        return sorted[base];
+    }
+
+    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+}
+
+/**
+ * Calculates the full set of empirical statistics.
+ * @param {Array<number>} costs Array of all simulation costs.
+ * @returns {Object} Empirical statistics.
+ */
+function calculateStats(costs) {
+    if (costs.length === 0) {
+        return { mean: 0, stdDev: 0, min: 0, q1: 0, median: 0, q3: 0, max: 0 };
+    }
+
+    // Sort is required for quartiles, and for simple min/max 
+    // We use .slice() to create a copy so the original allCosts array is not mutated
+    const sortedCosts = costs.slice().sort((a, b) => a - b);
+    
+    // Mean
+    const mean = sortedCosts.reduce((a, b) => a + b, 0) / sortedCosts.length;
+
+    // Standard Deviation
+    const squaredDifferences = sortedCosts.map(cost => Math.pow(cost - mean, 2));
+    const variance = squaredDifferences.reduce((a, b) => a + b, 0) / sortedCosts.length;
+    const stdDev = Math.sqrt(variance);
+
+    // Quartiles
+    const min = sortedCosts[0];
+    const max = sortedCosts[sortedCosts.length - 1];
+    const q1 = quartile(sortedCosts, 0.25);
+    const median = quartile(sortedCosts, 0.5);
+    const q3 = quartile(sortedCosts, 0.75);
+
+    return { mean, stdDev, min, q1, median, q3, max };
+}
+
 /**
  * Closed-Form Analytic Solution for Expected Duration E(n)
- * ... (This function remains unchanged) ...
  */
 function calculateAnalyticExpectedCost(n, N, p, C) {
     const q = 1 - p;
@@ -22,7 +68,6 @@ function calculateAnalyticExpectedCost(n, N, p, C) {
 
 /**
  * Runs a single random walk simulation trial.
- * ... (This function remains unchanged) ...
  */
 function runSingleTrial(n0, N, p, C) {
     let currentState = n0;
@@ -40,9 +85,6 @@ function runSingleTrial(n0, N, p, C) {
 
 /**
  * Processes the raw cost data into bins for the histogram.
- * @param {Array<number>} costs Array of all simulation costs.
- * @param {number} numBins Desired number of bins.
- * @returns {{labels: Array<string>, data: Array<number>}} Histogram data.
  */
 function generateHistogramData(costs, numBins) {
     if (costs.length === 0) return { labels: [], data: [] };
@@ -50,23 +92,19 @@ function generateHistogramData(costs, numBins) {
     const minCost = Math.min(...costs);
     const maxCost = Math.max(...costs);
     
-    // Ensure we have at least a minimal range to define the bin width
     const range = maxCost - minCost;
     const binWidth = range > 0 ? range / numBins : 1;
     const bins = new Array(numBins).fill(0);
     const labels = [];
 
-    // Bin the data
     costs.forEach(cost => {
         let binIndex = Math.floor((cost - minCost) / binWidth);
-        // Ensure the max value falls into the last bin
         if (binIndex >= numBins) {
             binIndex = numBins - 1; 
         }
         bins[binIndex]++;
     });
     
-    // Create human-readable labels
     for (let i = 0; i < numBins; i++) {
         const lowerBound = minCost + i * binWidth;
         const upperBound = lowerBound + binWidth;
@@ -79,14 +117,10 @@ function generateHistogramData(costs, numBins) {
 
 /**
  * Draws the histogram using Chart.js.
- * @param {Array<string>} labels Bin labels.
- * @param {Array<number>} data Bin counts.
- * @param {number} analyticCost The expected value to mark on the chart.
  */
 function drawHistogram(labels, data, analyticCost) {
     const ctx = document.getElementById('costHistogram').getContext('2d');
     
-    // Destroy previous chart instance if it exists
     if (costChart) {
         costChart.destroy();
     }
@@ -122,13 +156,12 @@ function drawHistogram(labels, data, analyticCost) {
                         label: (context) => `Frequency: ${context.formattedValue}`
                     }
                 },
-                // Add a vertical line plugin to mark the Analytic Expected Cost (Mean)
                 annotation: {
                     annotations: [{
                         type: 'line',
                         mode: 'vertical',
                         scaleID: 'x',
-                        value: analyticCost, // This is tricky for a bar chart's X-axis
+                        value: analyticCost, 
                         borderColor: 'red',
                         borderWidth: 2,
                         label: {
@@ -141,8 +174,27 @@ function drawHistogram(labels, data, analyticCost) {
             }
         }
     });
-    // Note: Marking a precise value on the X-axis of a Chart.js bar chart is non-trivial,
-    // so the analytic mean annotation is included here as a conceptual placeholder.
+}
+
+
+/**
+ * Displays the calculated empirical statistics in the HTML table.
+ * @param {Object} stats The statistics object returned from calculateStats.
+ */
+function displayEmpiricalStats(stats) {
+    // Helper function for currency formatting
+    const format = (value) => `$${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+
+    document.getElementById('stat_mean').textContent = format(stats.mean);
+    document.getElementById('stat_stddev').textContent = format(stats.stdDev);
+    document.getElementById('stat_min').textContent = format(stats.min);
+    document.getElementById('stat_q1').textContent = format(stats.q1);
+    document.getElementById('stat_median').textContent = format(stats.median);
+    document.getElementById('stat_q3').textContent = format(stats.q3);
+    document.getElementById('stat_max').textContent = format(stats.max);
+
+    // Show the table now that it's populated
+    document.getElementById('empiricalStats').style.display = 'block';
 }
 
 
@@ -157,7 +209,7 @@ function runSimulation() {
     const C = parseFloat(document.getElementById('costC').value);
     const T = parseInt(document.getElementById('numTrials').value);
 
-    // Validation remains the same
+    // Validation
     if (isNaN(N) || N <= 1 || N > 100) return alert("Max State (N) must be a positive integer.");
     if (isNaN(n0) || n0 < 1 || n0 >= N) return alert(`Start State (n₀) must be between 1 and ${N - 1}.`);
     if (isNaN(p) || p <= 0 || p >= 1) return alert("Prob. Up (p) must be strictly between 0 and 1.");
@@ -170,6 +222,7 @@ function runSimulation() {
 
     analyticResultElement.textContent = 'Calculating...';
     simulationResultElement.textContent = 'Simulating...';
+    document.getElementById('empiricalStats').style.display = 'none'; // Hide stats during simulation
 
 
     // --- 2. Calculate Analytic Result ---
@@ -178,7 +231,6 @@ function runSimulation() {
 
 
     // --- 3. Run Monte Carlo Simulation (Chunked for browser responsiveness) ---
-    // Array to store all individual trial results
     const allCosts = [];
 
     setTimeout(() => {
@@ -192,13 +244,12 @@ function runSimulation() {
             for (let i = 0; i < trialsToRun; i++) {
                 const cost = runSingleTrial(n0, N, p, C);
                 totalCostSum += cost;
-                allCosts.push(cost); // Store the individual result
+                allCosts.push(cost); 
             }
 
             trialsComplete += trialsToRun;
 
             if (trialsComplete < T) {
-                // Update progress and schedule next chunk
                 simulationResultElement.textContent = `Simulating... (${((trialsComplete / T) * 100).toFixed(0)}%)`;
                 setTimeout(processChunk, 0); 
             } else {
@@ -206,7 +257,11 @@ function runSimulation() {
                 const E_simulation = totalCostSum / T;
                 simulationResultElement.textContent = `$${E_simulation.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
                 
-                // --- 4. Generate and Draw Histogram ---
+                // --- 4. Calculate and Display Empirical Statistics ---
+                const empiricalStats = calculateStats(allCosts);
+                displayEmpiricalStats(empiricalStats);
+
+                // --- 5. Generate and Draw Histogram ---
                 const NUM_BINS = 20; 
                 const { labels, data } = generateHistogramData(allCosts, NUM_BINS);
                 drawHistogram(labels, data, E_analytic); 
@@ -217,7 +272,7 @@ function runSimulation() {
     }, 10);
 }
 
-// Initial analytic calculation on load (unchanged, but uses the updated function)
+// Initial analytic calculation on load
 window.onload = function() {
     setTimeout(() => {
         try {
