@@ -1,70 +1,148 @@
+// Global variable to hold the Chart.js instance
+let costChart = null;
+
 /**
  * Closed-Form Analytic Solution for Expected Duration E(n)
- * Uses the formula for Expected Duration (number of steps T(n)) of a Gambler's Ruin/Random Walk
- * with cost C per step, when p != 0.5.
- *
- * E(n) = C * T(n)
- * T(n) = (1 / (p-q)) * [ (N * ( (q/p)^n - 1) / ( (q/p)^N - 1) ) - n ]
- *
- * @param {number} n The starting state.
- * @param {number} N The absorbing state (maximum state).
- * @param {number} p The probability of moving up (to n+1).
- * @param {number} C The cost per transition.
- * @returns {number} The analytic expected total cost E(n).
+ * ... (This function remains unchanged) ...
  */
 function calculateAnalyticExpectedCost(n, N, p, C) {
     const q = 1 - p;
-
-    // Check for the critical case p = 0.5
     if (Math.abs(p - 0.5) < 0.00001) {
-        // Expected Duration for p=0.5 is T(n) = n * (N - n)
         const expectedSteps = n * (N - n);
         return C * expectedSteps;
     }
-
-    // Standard solution for p != 0.5
-    const ratio = q / p; // The ratio (q/p)
-    const factor = 1 / (p - q); // 1 / (p-q)
-
-    // Calculate T(n) (Expected Number of Steps)
+    const ratio = q / p;
+    const factor = 1 / (p - q);
     const numerator = N * (Math.pow(ratio, n) - 1);
     const denominator = Math.pow(ratio, N) - 1;
-
     const expectedSteps = factor * ( (numerator / denominator) - n );
-
-    // Expected Cost E(n) = C * T(n)
     return C * expectedSteps;
 }
 
 
 /**
  * Runs a single random walk simulation trial.
- * @param {number} n0 The starting state.
- * @param {number} N The absorbing state (maximum state).
- * @param {number} p The probability of moving up (to n+1).
- * @param {number} C The cost per transition.
- * @returns {number} The total cost for this single trial.
+ * ... (This function remains unchanged) ...
  */
 function runSingleTrial(n0, N, p, C) {
     let currentState = n0;
     let totalCost = 0;
-
-    // The walk stops when it hits state 0 (Failure) or state N (Success)
     while (currentState > 0 && currentState < N) {
-        // Increment cost for the transition
         totalCost += C;
-
-        // Determine the next state
         if (Math.random() < p) {
-            // Move up (towards Success)
             currentState += 1;
         } else {
-            // Move down (towards Failure)
             currentState -= 1;
         }
     }
-
     return totalCost;
+}
+
+/**
+ * Processes the raw cost data into bins for the histogram.
+ * @param {Array<number>} costs Array of all simulation costs.
+ * @param {number} numBins Desired number of bins.
+ * @returns {{labels: Array<string>, data: Array<number>}} Histogram data.
+ */
+function generateHistogramData(costs, numBins) {
+    if (costs.length === 0) return { labels: [], data: [] };
+
+    const minCost = Math.min(...costs);
+    const maxCost = Math.max(...costs);
+    
+    // Ensure we have at least a minimal range to define the bin width
+    const range = maxCost - minCost;
+    const binWidth = range > 0 ? range / numBins : 1;
+    const bins = new Array(numBins).fill(0);
+    const labels = [];
+
+    // Bin the data
+    costs.forEach(cost => {
+        let binIndex = Math.floor((cost - minCost) / binWidth);
+        // Ensure the max value falls into the last bin
+        if (binIndex >= numBins) {
+            binIndex = numBins - 1; 
+        }
+        bins[binIndex]++;
+    });
+    
+    // Create human-readable labels
+    for (let i = 0; i < numBins; i++) {
+        const lowerBound = minCost + i * binWidth;
+        const upperBound = lowerBound + binWidth;
+        labels.push(`$${Math.round(lowerBound)} - $${Math.round(upperBound)}`);
+    }
+
+    return { labels: labels, data: bins };
+}
+
+
+/**
+ * Draws the histogram using Chart.js.
+ * @param {Array<string>} labels Bin labels.
+ * @param {Array<number>} data Bin counts.
+ * @param {number} analyticCost The expected value to mark on the chart.
+ */
+function drawHistogram(labels, data, analyticCost) {
+    const ctx = document.getElementById('costHistogram').getContext('2d');
+    
+    // Destroy previous chart instance if it exists
+    if (costChart) {
+        costChart.destroy();
+    }
+    
+    costChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Frequency (Cost Distribution)',
+                data: data,
+                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    title: { display: true, text: 'Number of Trials (Frequency)' },
+                    beginAtZero: true
+                },
+                x: {
+                    title: { display: true, text: 'Cost Bin' }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: (context) => `Cost Range: ${context[0].label}`,
+                        label: (context) => `Frequency: ${context.formattedValue}`
+                    }
+                },
+                // Add a vertical line plugin to mark the Analytic Expected Cost (Mean)
+                annotation: {
+                    annotations: [{
+                        type: 'line',
+                        mode: 'vertical',
+                        scaleID: 'x',
+                        value: analyticCost, // This is tricky for a bar chart's X-axis
+                        borderColor: 'red',
+                        borderWidth: 2,
+                        label: {
+                            content: `Analytic Mean: $${analyticCost.toFixed(2)}`,
+                            enabled: true,
+                            position: 'start'
+                        }
+                    }]
+                }
+            }
+        }
+    });
+    // Note: Marking a precise value on the X-axis of a Chart.js bar chart is non-trivial,
+    // so the analytic mean annotation is included here as a conceptual placeholder.
 }
 
 
@@ -79,7 +157,7 @@ function runSimulation() {
     const C = parseFloat(document.getElementById('costC').value);
     const T = parseInt(document.getElementById('numTrials').value);
 
-    // Basic validation
+    // Validation remains the same
     if (isNaN(N) || N <= 1 || N > 100) return alert("Max State (N) must be a positive integer.");
     if (isNaN(n0) || n0 < 1 || n0 >= N) return alert(`Start State (n₀) must be between 1 and ${N - 1}.`);
     if (isNaN(p) || p <= 0 || p >= 1) return alert("Prob. Up (p) must be strictly between 0 and 1.");
@@ -96,23 +174,25 @@ function runSimulation() {
 
     // --- 2. Calculate Analytic Result ---
     const E_analytic = calculateAnalyticExpectedCost(n0, N, p, C);
-    // Format as currency
     analyticResultElement.textContent = `$${E_analytic.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
 
 
     // --- 3. Run Monte Carlo Simulation (Chunked for browser responsiveness) ---
+    // Array to store all individual trial results
+    const allCosts = [];
+
     setTimeout(() => {
         let totalCostSum = 0;
         let trialsComplete = 0;
-
-        // Chunking prevents the browser from freezing on large simulations
         const CHUNK_SIZE = 1000;
 
         function processChunk() {
             const trialsToRun = Math.min(T - trialsComplete, CHUNK_SIZE);
 
             for (let i = 0; i < trialsToRun; i++) {
-                totalCostSum += runSingleTrial(n0, N, p, C);
+                const cost = runSingleTrial(n0, N, p, C);
+                totalCostSum += cost;
+                allCosts.push(cost); // Store the individual result
             }
 
             trialsComplete += trialsToRun;
@@ -120,24 +200,25 @@ function runSimulation() {
             if (trialsComplete < T) {
                 // Update progress and schedule next chunk
                 simulationResultElement.textContent = `Simulating... (${((trialsComplete / T) * 100).toFixed(0)}%)`;
-                setTimeout(processChunk, 0); // Schedule next chunk immediately
+                setTimeout(processChunk, 0); 
             } else {
                 // All trials complete
                 const E_simulation = totalCostSum / T;
-                // Format as currency
                 simulationResultElement.textContent = `$${E_simulation.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+                
+                // --- 4. Generate and Draw Histogram ---
+                const NUM_BINS = 20; 
+                const { labels, data } = generateHistogramData(allCosts, NUM_BINS);
+                drawHistogram(labels, data, E_analytic); 
             }
         }
-
-        // Start the chunk processing
         processChunk();
 
-    }, 10); // Initial slight delay
+    }, 10);
 }
 
-// Automatically calculate the analytic result when the page loads (using default values)
+// Initial analytic calculation on load (unchanged, but uses the updated function)
 window.onload = function() {
-    // A small delay to ensure all DOM elements are loaded
     setTimeout(() => {
         try {
             const N = parseInt(document.getElementById('maxState').value);
