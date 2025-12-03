@@ -112,3 +112,23 @@ button:hover {
     color: #777;
     margin-top: 10px;
 }
+
+/* 🌟 NEW: HISTOGRAM STYLING TO PREVENT GIGANTIC SCROLLING 🌟 */
+.chart-container {
+    /* Sets maximum width relative to the main container */
+    max-width: 850px; 
+    /* Centers the chart horizontally */
+    margin: 30px auto; 
+    /* Defines a fixed height for the container */
+    height: 450px; 
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fcfcfc;
+}
+
+/* Ensures the canvas fills its contained space */
+#costHistogram {
+    width: 100% !important;
+    height: 100% !important;
+}
