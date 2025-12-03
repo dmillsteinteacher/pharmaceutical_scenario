@@ -52,9 +52,37 @@
             </div>
         </div>
 
+        <div id="empiricalStats" class="results" style="display:none; margin-top: 20px;">
+            <h2>🔬 Empirical Distribution Statistics</h2>
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Mean</th>
+                        <th>Standard Dev.</th>
+                        <th>Min</th>
+                        <th>Q1</th>
+                        <th>Median (Q2)</th>
+                        <th>Q3</th>
+                        <th>Max</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr id="statsRow">
+                        <td id="stat_mean"></td>
+                        <td id="stat_stddev"></td>
+                        <td id="stat_min"></td>
+                        <td id="stat_q1"></td>
+                        <td id="stat_median"></td>
+                        <td id="stat_q3"></td>
+                        <td id="stat_max"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
         <div class="chart-container">
             <h2>Cost Distribution Histogram</h2>
-            <canvas id="costHistogram"></canvas>
+            <canvas id="costHistogram" width="850" height="450"></canvas>
         </div>
         
     </div>
